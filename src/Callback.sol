@@ -3,6 +3,14 @@ pragma solidity ^0.8.17;
 
 import "forge-std/console.sol";
 
+interface ISchedulerCallback {
+    /**
+     * @notice Function that will be called when a CallbackScheduler callback is executed
+     * @param data Arbitrary data passed to the callback
+     */
+    function handleSchedulerCallback(bytes calldata data) external;
+}
+
 /**
  * @title CallbackScheduler
  * @notice A contract that allows users to schedule a callback to be executed
@@ -52,9 +60,7 @@ contract CallbackScheduler {
 
     event CallbackExecuted(
         uint256 indexed callbackId,
-        bool success,
         uint256 gasUsed,
-        uint256 gasCost,
         uint256 refund
     );
 
@@ -129,7 +135,7 @@ contract CallbackScheduler {
 
         uint256 gasBefore = gasleft();
 
-        (bool _success, ) = cb.target.call{gas: cb.callbackGasLimit}(cb.data);
+        ISchedulerCallback(cb.target).handleSchedulerCallback(cb.data);
 
         uint256 gasAfter = gasleft();
         uint256 gasUsed = gasBefore - gasAfter + EXTRA_GAS;
@@ -142,7 +148,7 @@ contract CallbackScheduler {
             cb.user.transfer(refund);
         }
 
-        emit CallbackExecuted(_callbackId, _success, gasUsed, gasCost, refund);
+        emit CallbackExecuted(_callbackId, gasUsed, refund);
     }
 
     /**

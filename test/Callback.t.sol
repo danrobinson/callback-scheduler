@@ -4,13 +4,13 @@ pragma solidity ^0.8.17;
 import "forge-std/Test.sol";
 import "../src/Callback.sol";
 
-contract MockTarget {
+contract MockTarget is ISchedulerCallback {
     bool public called;
     bytes public receivedData;
 
-    function handleCallback(uint256) external {
+    function handleSchedulerCallback(bytes calldata data) external {
         called = true;
-        receivedData = msg.data;
+        receivedData = data;
     }
 }
 
@@ -34,9 +34,7 @@ contract CallbackSchedulerTest is Test {
 
     event CallbackExecuted(
         uint256 indexed callbackId,
-        bool success,
         uint256 gasUsed,
-        uint256 gasCost,
         uint256 refund
     );
 
@@ -49,10 +47,12 @@ contract CallbackSchedulerTest is Test {
 
     function testScheduleCallback() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
+
+        assertEq(scheduler.callbackCount(), 0);
 
         vm.startPrank(user);
-        vm.expectEmit(true, true, false, true);
+        vm.expectEmit(true, true, true, true);
         emit CallbackScheduled(
             1, // callbackId
             user,
@@ -73,11 +73,12 @@ contract CallbackSchedulerTest is Test {
         vm.stopPrank();
 
         assertEq(callbackId, 1);
+        assertEq(scheduler.callbackCount(), 1);
     }
 
     function testExecuteCallback() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -95,7 +96,7 @@ contract CallbackSchedulerTest is Test {
         uint256 executorBalanceBefore = executor.balance;
 
         vm.expectEmit(true, false, false, false);
-        emit CallbackExecuted(callbackId, true, 0, 0, 0); // We don't know exact gas values but we know it succeeded
+        emit CallbackExecuted(callbackId, 0, 0);
 
         vm.prank(executor);
         scheduler.executeCallback{gas: GAS_LIMIT + EXTRA_GAS}(callbackId);
@@ -107,7 +108,7 @@ contract CallbackSchedulerTest is Test {
 
     function testExecuteCallbackWrongBlock() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -125,7 +126,7 @@ contract CallbackSchedulerTest is Test {
 
     function testExecuteCallbackWrongGasPrice() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -144,7 +145,7 @@ contract CallbackSchedulerTest is Test {
 
     function testRecoverDepositAfterTargetBlock() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -168,7 +169,7 @@ contract CallbackSchedulerTest is Test {
 
     function testCannotRecoverDepositBeforeTargetBlock() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -186,7 +187,7 @@ contract CallbackSchedulerTest is Test {
 
     function testCannotRecoverDepositInTargetBlockBeforeGasPrice() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -207,7 +208,7 @@ contract CallbackSchedulerTest is Test {
 
     function testCannotRecoverExecutedDeposit() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
@@ -222,7 +223,7 @@ contract CallbackSchedulerTest is Test {
         vm.txGasPrice(GAS_PRICE);
         
         vm.expectEmit(true, false, false, false);
-        emit CallbackExecuted(callbackId, true, 0, 0, 0); // We don't know exact gas values but we know it succeeded
+        emit CallbackExecuted(callbackId, 0, 0);
 
         vm.prank(address(0x3));
         scheduler.executeCallback{gas: GAS_LIMIT + EXTRA_GAS}(callbackId);
@@ -235,7 +236,7 @@ contract CallbackSchedulerTest is Test {
 
     function testCanRecoverDepositInTargetBlockAfterGasPrice() public {
         uint256 deposit = (GAS_LIMIT + EXTRA_GAS) * GAS_PRICE;
-        bytes memory data = abi.encodeWithSelector(MockTarget.handleCallback.selector, 42);
+        bytes memory data = abi.encode(42);
 
         vm.prank(user);
         uint256 callbackId = scheduler.scheduleCallback{value: deposit}(
