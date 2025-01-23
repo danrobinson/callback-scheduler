@@ -114,7 +114,7 @@ contract CallbackScheduler {
             "Too early to recover"
         );
 
-        callbacks[cb.encode()] = false;
+        callbacks[callbackId] = false;
 
         // Refund everything since it wasn't executed
         uint256 refundAmount = (cb.interaction.gas) * cb.callbackGasPrice + cb.interaction.value;
